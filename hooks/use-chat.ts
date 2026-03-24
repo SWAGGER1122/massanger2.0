@@ -134,22 +134,21 @@ export function useChat() {
       return;
     }
 
-    void supabaseClient
-      .from("messages")
-      .select("id, chat_id, sender_id, content, message_type, kind, voice_url, duration_sec, created_at, edited_at")
-      .eq("chat_id", activeChatId)
-      .order("created_at", { ascending: true })
-      .limit(200)
-      .then(({ data }) => {
-        if (!data) {
-          return;
-        }
-        const mapped = (data as Record<string, unknown>[]).map(mapDbRowToMessage);
-        setMessages((prev) => ({
-          ...prev,
-          [activeChatId]: mapped
-        }));
-      });
+    void (async () => {
+      const { data, error } = await supabaseClient.from("messages").select("*").eq("chat_id", activeChatId).order("created_at", { ascending: true });
+      if (error) {
+        console.error(error);
+        return;
+      }
+      if (!data) {
+        return;
+      }
+      const mapped = (data as Record<string, unknown>[]).map(mapDbRowToMessage);
+      setMessages((prev) => ({
+        ...prev,
+        [activeChatId]: mapped
+      }));
+    })();
   }, [activeChatId]);
 
   const normalizedChats = useMemo(() => dedupeChatsById(chats), [chats]);
@@ -284,18 +283,21 @@ export function useChat() {
       return;
     }
 
-    await persistMessage({
-      id: crypto.randomUUID(),
-      chatId: activeChatId,
-      senderId: currentUserIdState,
-      content: content.trim(),
-      kind: "text",
-      voiceUrl: null,
-      durationSec: null,
-      createdAt: new Date().toISOString(),
-      editedAt: null,
-      status: "sent"
-    });
+    if (!supabaseClient || !hasSupabaseEnv) {
+      return;
+    }
+
+    const { error } = await supabaseClient.from("messages").insert([
+      {
+        chat_id: activeChatId,
+        content: content.trim(),
+        sender_id: currentUserIdState
+      }
+    ]);
+
+    if (error) {
+      console.error(error);
+    }
   }
 
   async function sendVoiceMessage(blob: Blob, durationSec: number) {
