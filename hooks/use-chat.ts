@@ -71,26 +71,32 @@ export function useChat() {
   }, []);
 
   useEffect(() => {
-    if (!supabaseClient || !hasSupabaseEnv) {
+    if (!activeChatId || !supabaseClient || !hasSupabaseEnv) {
       return;
     }
 
     const client = supabaseClient;
 
     const channel = client
-      .channel("realtime:messages")
+      .channel(`realtime:messages:${activeChatId}`)
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
-          table: "messages"
+          table: "messages",
+          filter: `chat_id=eq.${activeChatId}`
         },
         (payload) => {
           const row = payload.new as Record<string, unknown>;
           const message = mapDbRowToMessage(row);
           setMessages((prev) => {
-            const nextByChat = upsertMessage(prev[message.chatId] ?? [], message);
+            const current = prev[message.chatId] ?? [];
+            if (current.find((item) => item.id === message.id)) {
+              return prev;
+            }
+
+            const nextByChat = [...current, message];
             return {
               ...prev,
               [message.chatId]: nextByChat
@@ -121,7 +127,7 @@ export function useChat() {
     return () => {
       void client.removeChannel(channel);
     };
-  }, []);
+  }, [activeChatId]);
 
   useEffect(() => {
     if (!activeChatId || !supabaseClient || !hasSupabaseEnv) {
@@ -169,34 +175,6 @@ export function useChat() {
       }),
     [globalSearch]
   );
-
-  function addMessageLocally(message: Message) {
-    setMessages((prev) => ({
-      ...prev,
-      [message.chatId]: [...(prev[message.chatId] ?? []), message]
-    }));
-  }
-
-  function touchChatWithMessage(chatId: string, message: Message) {
-    setChats((prev) =>
-      prev.map((chat) =>
-        chat.id === chatId
-          ? {
-              ...chat,
-              updatedAt: message.createdAt,
-              lastMessage: {
-                id: message.id,
-                content: message.kind === "voice" ? "Voice message" : message.content,
-                senderId: message.senderId,
-                createdAt: message.createdAt,
-                kind: message.kind,
-                status: message.status
-              }
-            }
-          : chat
-      )
-    );
-  }
 
   async function ensureProfileExists(userId: string) {
     if (!supabaseClient || !hasSupabaseEnv) {
@@ -296,7 +274,7 @@ export function useChat() {
     }
   }
 
-  function sendMessage(content: string) {
+  async function sendMessage(content: string) {
     if (!activeChatId || !content.trim() || !currentUserIdState) {
       return;
     }
@@ -306,7 +284,7 @@ export function useChat() {
       return;
     }
 
-    const message: Message = {
+    await persistMessage({
       id: crypto.randomUUID(),
       chatId: activeChatId,
       senderId: currentUserIdState,
@@ -317,11 +295,7 @@ export function useChat() {
       createdAt: new Date().toISOString(),
       editedAt: null,
       status: "sent"
-    };
-
-    addMessageLocally(message);
-    touchChatWithMessage(activeChatId, message);
-    void persistMessage(message);
+    });
   }
 
   async function sendVoiceMessage(blob: Blob, durationSec: number) {
@@ -363,8 +337,6 @@ export function useChat() {
       status: "sent"
     };
 
-    addMessageLocally(message);
-    touchChatWithMessage(activeChatId, message);
     await persistMessage(message);
   }
 
