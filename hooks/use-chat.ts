@@ -77,6 +77,7 @@ export function useChat() {
     }
 
     async function loadChats() {
+      if (!supabaseClient) return;
       // Пытаемся загрузить чаты с участниками и последним сообщением
       const { data, error } = await supabaseClient
         .from("chats")
@@ -145,7 +146,9 @@ export function useChat() {
       .subscribe();
 
     return () => {
-      void supabaseClient.removeChannel(channel);
+      if (supabaseClient) {
+        void supabaseClient.removeChannel(channel);
+      }
     };
   }, [currentUserIdState]);
 
@@ -362,21 +365,20 @@ export function useChat() {
       return;
     }
 
-    if (!supabaseClient || !hasSupabaseEnv) {
-      return;
-    }
+    const message: Message = {
+      id: crypto.randomUUID(),
+      chatId: activeChatId,
+      senderId: currentUserIdState,
+      content: content.trim(),
+      kind: "text",
+      voiceUrl: null,
+      durationSec: null,
+      createdAt: new Date().toISOString(),
+      editedAt: null,
+      status: "sent"
+    };
 
-    const { error } = await supabaseClient.from("messages").insert([
-      {
-        chat_id: activeChatId,
-        content: content.trim(),
-        sender_id: currentUserIdState
-      }
-    ]);
-
-    if (error) {
-      console.error(error);
-    }
+    await persistMessage(message);
   }
 
   async function sendVoiceMessage(blob: Blob, durationSec: number) {
