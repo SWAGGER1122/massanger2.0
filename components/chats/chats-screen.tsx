@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { ArrowLeft } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { CallModal } from "@/components/call/call-modal";
@@ -9,6 +10,7 @@ import { MessageList } from "@/components/chat/message-list";
 import { ChatList } from "@/components/sidebar/chat-list";
 import { useAgoraCall } from "@/hooks/use-agora-call";
 import { useChat } from "@/hooks/use-chat";
+import { cn } from "@/lib/utils";
 
 export function ChatsScreen() {
   const chatState = useChat();
@@ -53,11 +55,25 @@ export function ChatsScreen() {
     setActiveChatId(chatIdFromQuery);
   }, [chatIdFromQuery, chats, currentUserId, peerAvatar, peerName, peerUsername, setActiveChatId, upsertChat]);
 
-  return (
-    <div className="grid h-full grid-cols-[320px_1fr] gap-4">
-      <ChatList chatState={chatState} />
+  const isThreadVisible = Boolean(chatState.activeChatId);
 
-      <section className="flex min-h-0 flex-col">
+  return (
+    <div className="grid h-full grid-cols-1 gap-3 md:grid-cols-[320px_1fr] md:gap-4">
+      <div className={cn("min-h-0", isThreadVisible ? "hidden md:block" : "block")}>
+        <ChatList chatState={chatState} />
+      </div>
+
+      <section className={cn("min-h-0 flex-col", isThreadVisible ? "flex" : "hidden md:flex")}>
+        <div className="mb-2 flex items-center gap-2 md:hidden">
+          <button
+            onClick={() => setActiveChatId("")}
+            className="rounded-xl border border-white/10 bg-white/5 p-2 text-zinc-300"
+          >
+            <ArrowLeft size={16} />
+          </button>
+          <p className="text-sm text-zinc-300">{chatState.activeChat?.title ?? "Чат"}</p>
+        </div>
+
         <motion.div
           key={chatState.activeChatId}
           initial={{ opacity: 0, y: 14 }}

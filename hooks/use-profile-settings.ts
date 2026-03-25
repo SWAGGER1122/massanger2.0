@@ -112,6 +112,13 @@ export function useProfileSettings(userId: string | null) {
     }
 
     setUploadingAvatar(true);
+
+    const { data: sessionData } = await supabaseClient.auth.getSession();
+    if (!sessionData.session) {
+      setUploadingAvatar(false);
+      return;
+    }
+
     const extension = file.name.split(".").pop() || "jpg";
     const path = `${userId}/avatar-${crypto.randomUUID()}.${extension}`;
     const uploadResult = await supabaseClient.storage.from("avatars").upload(path, file, {

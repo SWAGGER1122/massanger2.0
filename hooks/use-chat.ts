@@ -51,9 +51,9 @@ function isUuid(value: string) {
 }
 
 export function useChat() {
-  const [chats, setChats] = useState<ChatSummary[]>(initialChats);
-  const [messages, setMessages] = useState<Record<string, Message[]>>(messagesByChatId);
-  const [activeChatId, setActiveChatId] = useState<string>(initialChats[0]?.id ?? "");
+  const [chats, setChats] = useState<ChatSummary[]>([]);
+  const [messages, setMessages] = useState<Record<string, Message[]>>({});
+  const [activeChatId, setActiveChatId] = useState<string>("");
   const [search, setSearch] = useState("");
   const [globalSearch, setGlobalSearch] = useState("");
   const [currentUserIdState, setCurrentUserIdState] = useState("");
@@ -69,6 +69,85 @@ export function useChat() {
       }
     });
   }, []);
+
+  // Загрузка реальных чатов из Supabase
+  useEffect(() => {
+    if (!currentUserIdState || !supabaseClient || !hasSupabaseEnv) {
+      return;
+    }
+
+    async function loadChats() {
+      // Пытаемся загрузить чаты с участниками и последним сообщением
+      const { data, error } = await supabaseClient
+        .from("chats")
+        .select(`
+          *,
+          chat_participants(
+            user_id,
+            profiles(id, username, full_name, avatar_url)
+          ),
+          messages(id, content, sender_id, created_at, kind)
+        `)
+        .order("updated_at", { ascending: false });
+
+      if (error) {
+        console.error("Error loading chats:", error.message, error.details, error.hint);
+        return;
+      }
+
+      const mappedChats: ChatSummary[] = data.map((chat: any) => {
+        // Сортируем сообщения локально, чтобы найти последнее
+        const sortedMessages = chat.messages && chat.messages.length > 0 
+          ? [...chat.messages].sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          : [];
+        
+        const lastMsg = sortedMessages[0] || null;
+
+        return {
+          id: chat.id,
+          title: chat.title || "Untitled Chat",
+          isGroup: chat.is_group,
+          isArchived: chat.is_archived || false,
+          avatarUrl: chat.avatar_url,
+          unreadCount: 0,
+          updatedAt: chat.updated_at,
+          lastMessage: lastMsg ? {
+            id: lastMsg.id,
+            content: lastMsg.kind === "voice" ? "Voice message" : lastMsg.content,
+            senderId: lastMsg.sender_id,
+            createdAt: lastMsg.created_at,
+            kind: lastMsg.kind,
+            status: "sent"
+          } : null,
+          participants: chat.chat_participants?.map((p: any) => ({
+            id: p.profiles.id,
+            username: p.profiles.username,
+            avatarUrl: p.profiles.avatar_url,
+            presence: "offline"
+          })) || []
+        };
+      });
+
+      setChats(mappedChats);
+      if (mappedChats.length > 0 && !activeChatId) {
+        setActiveChatId(mappedChats[0].id);
+      }
+    }
+
+    void loadChats();
+
+    // Подписка на изменения в чатах (новые чаты, обновления)
+    const channel = supabaseClient
+      .channel("public:chats")
+      .on("postgres_changes", { event: "*", schema: "public", table: "chats" }, () => {
+        void loadChats();
+      })
+      .subscribe();
+
+    return () => {
+      void supabaseClient.removeChannel(channel);
+    };
+  }, [currentUserIdState]);
 
   useEffect(() => {
     if (!activeChatId || !supabaseClient || !hasSupabaseEnv) {
@@ -315,6 +394,11 @@ export function useChat() {
     const filePath = `${activeChatId}/${currentUserIdState}/${crypto.randomUUID()}.${extension}`;
 
     if (supabaseClient && hasSupabaseEnv) {
+      const { data: sessionData } = await supabaseClient.auth.getSession();
+      if (!sessionData.session) {
+        return;
+      }
+
       const uploadResult = await supabaseClient.storage.from("media").upload(filePath, blob, {
         contentType: blob.type || `audio/${extension}`,
         upsert: false

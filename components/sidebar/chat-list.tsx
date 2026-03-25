@@ -8,9 +8,10 @@ import { cn } from "@/lib/utils";
 
 interface ChatListProps {
   chatState: UseChatReturn;
+  onSelectChat?: () => void;
 }
 
-export function ChatList({ chatState }: ChatListProps) {
+export function ChatList({ chatState, onSelectChat }: ChatListProps) {
   const { filteredActiveChats, filteredArchivedChats, activeChatId, setActiveChatId, search, setSearch } = chatState;
   const [menu, setMenu] = useState<{ chatId: string; x: number; y: number } | null>(null);
   const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -32,6 +33,7 @@ export function ChatList({ chatState }: ChatListProps) {
         transition={{ duration: 0.2 }}
         onClick={() => {
           setActiveChatId(chatId);
+          onSelectChat?.();
           closeMenu();
         }}
         onContextMenu={(event) => {
@@ -80,7 +82,7 @@ export function ChatList({ chatState }: ChatListProps) {
   }
 
   return (
-    <aside onClick={closeMenu} className="glass-panel relative flex h-full w-full max-w-[340px] flex-col rounded-3xl p-4">
+    <aside onClick={closeMenu} className="glass-panel relative flex h-full w-full max-w-none flex-col rounded-3xl p-4 md:max-w-[340px]">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-xl font-semibold">Chats</h2>
         <span className="rounded-full bg-white/10 px-2 py-1 text-xs text-zinc-300">{filteredActiveChats.length}</span>

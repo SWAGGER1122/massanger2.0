@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import type { IAgoraRTCClient, ILocalAudioTrack, ILocalVideoTrack } from "agora-rtc-sdk-ng";
 import { agoraConfig, getAgoraRtc } from "@/lib/agora/client";
+import { supabaseClient } from "@/lib/supabase/client";
 
 type CallKind = "audio" | "video";
 
@@ -30,48 +31,51 @@ export function useAgoraCall() {
         return;
       }
 
-      if (!agoraConfig.tokenServerUrl) {
-        throw new Error("Missing NEXT_PUBLIC_AGORA_TOKEN_URL");
-      }
-
       async function fetchToken(requestUid: string | number) {
-        const response = await fetch(agoraConfig.tokenServerUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            channelName: channel,
-            uid: requestUid
-          })
-        });
-
-        if (!response.ok) {
-          const text = await response.text();
-          throw new Error(text || "Failed to fetch Agora token");
+        if (!supabaseClient) {
+          throw new Error("Supabase client is not initialized");
         }
 
-        const payload = (await response.json()) as { token?: string };
-        if (!payload.token) {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        if (!session) {
+          throw new Error("User is not authenticated");
+        }
+
+        const { data, error } = await supabaseClient.functions.invoke("agora-token", {
+          body: {
+            channelName: channel,
+            uid: requestUid
+          },
+          headers: {
+            Authorization: `Bearer ${session.access_token}`
+          }
+        });
+
+        if (error) {
+          throw new Error(error.message || "Failed to fetch Agora token");
+        }
+
+        if (!data?.token) {
           throw new Error("Agora token is missing in response");
         }
 
-        return payload.token;
+        return data.token;
       }
 
       const AgoraRTC = await getAgoraRtc();
+      // Отключаем сбор аналитики и логов, чтобы избежать сетевых ошибок в консоли
+      AgoraRTC.disableLogUpload();
       const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
       clientRef.current = client;
 
-      let token = await fetchToken(uid);
-      let joinUid: string | number = uid;
+      // Используем 0 как UID для автоматической генерации числового UID в Agora
+      const token = await fetchToken(0);
 
       try {
-        await client.join(agoraConfig.appId, channel, token, joinUid);
-      } catch {
-        joinUid = uidFromUserId(uid);
-        token = await fetchToken(joinUid);
-        await client.join(agoraConfig.appId, channel, token, joinUid);
+        await client.join(agoraConfig.appId, channel, token, 0);
+      } catch (err) {
+        console.error("Failed to join Agora channel:", err);
+        throw err;
       }
 
       const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();

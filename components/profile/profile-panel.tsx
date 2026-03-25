@@ -13,7 +13,7 @@ export function ProfilePanel({ chatState, theme, onThemeChange }: ProfilePanelPr
   const me = chatState.users.find((user) => user.id === chatState.currentUserId);
 
   return (
-    <aside className="glass-panel h-full min-w-[280px] rounded-3xl p-4">
+    <aside className="glass-panel h-full min-w-0 rounded-3xl p-4 md:min-w-[280px]">
       <div className="mb-6">
         <h2 className="text-lg font-semibold">Профиль</h2>
         <p className="text-sm text-zinc-400">Настройки аккаунта и приватности</p>

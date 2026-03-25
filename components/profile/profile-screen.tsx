@@ -18,7 +18,7 @@ export function ProfileScreen() {
   const profile = useProfileSettings(session?.user.id ?? null);
 
   return (
-    <div className="grid h-full grid-cols-[360px_1fr] gap-4">
+    <div className="grid h-full grid-cols-1 gap-3 md:grid-cols-[360px_1fr] md:gap-4">
       <ProfilePanel
         chatState={chatState}
         theme={theme}
@@ -44,7 +44,7 @@ export function ProfileScreen() {
             <h1 className="text-lg font-semibold">Настройки</h1>
             <p className="mt-1 text-sm text-zinc-400">Редактирование bio, приватности и аватара</p>
 
-            <div className="mt-4 flex items-center gap-3">
+            <div className="mt-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
               <button
                 onClick={() => fileInputRef.current?.click()}
                 className="relative h-20 w-20 overflow-hidden rounded-full border border-white/20 bg-white/5"
@@ -96,7 +96,7 @@ export function ProfileScreen() {
               />
             </div>
 
-            <div className="mt-4 grid grid-cols-2 gap-3">
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="rounded-2xl border border-white/10 bg-white/5 p-3">
                 <p className="mb-1 text-xs text-zinc-400">Кто видит мой номер</p>
                 <select
