@@ -18,37 +18,45 @@ export function MessageInput({ chatState, onOpenCall }: MessageInputProps) {
   const startedAtRef = useRef<number>(0);
 
   async function startRecording() {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/ogg;codecs=opus";
-    const recorder = new MediaRecorder(stream, { mimeType });
-    recorderRef.current = recorder;
-    chunksRef.current = [];
-    startedAtRef.current = Date.now();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/ogg;codecs=opus";
+      const recorder = new MediaRecorder(stream, { mimeType });
+      recorderRef.current = recorder;
+      chunksRef.current = [];
+      startedAtRef.current = Date.now();
+      console.log("Voice recorder started", { mimeType });
 
-    recorder.ondataavailable = (event) => {
-      if (event.data.size > 0) {
-        chunksRef.current.push(event.data);
-      }
-    };
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunksRef.current.push(event.data);
+        }
+      };
 
-    recorder.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: mimeType });
-      const durationSec = Math.max(1, Math.round((Date.now() - startedAtRef.current) / 1000));
-      setSavingVoice(true);
-      void chatState.sendVoiceMessage(blob, durationSec).finally(() => {
-        setSavingVoice(false);
-      });
-      stream.getTracks().forEach((track) => track.stop());
-    };
+      recorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: mimeType });
+        const durationSec = Math.max(1, Math.round((Date.now() - startedAtRef.current) / 1000));
+        console.log("Voice recorder stopped", { durationSec, size: blob.size, mimeType });
+        setSavingVoice(true);
+        void chatState.sendVoiceMessage(blob, durationSec).finally(() => {
+          setSavingVoice(false);
+        });
+        stream.getTracks().forEach((track) => track.stop());
+      };
 
-    recorder.start();
-    setRecording(true);
+      recorder.start();
+      setRecording(true);
+    } catch (error) {
+      console.error("Voice recorder failed to start", error);
+      setRecording(false);
+    }
   }
 
   function stopRecording() {
     if (!recorderRef.current) {
       return;
     }
+    console.log("Voice recorder stop requested");
     recorderRef.current.stop();
     recorderRef.current = null;
     setRecording(false);

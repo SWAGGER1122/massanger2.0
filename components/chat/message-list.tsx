@@ -55,6 +55,7 @@ export function MessageList({ chatState }: MessageListProps) {
                   {message.kind === "voice" ? (
                     <div className="flex flex-col gap-1 text-sm text-zinc-100">
                       <VoiceMessagePlayer url={message.voiceUrl ?? ""} durationSec={message.durationSec} />
+                      <audio controls src={message.voiceUrl ?? ""} className="w-full" />
                     </div>
                   ) : (
                     <p className="text-sm text-zinc-100">{message.content}</p>

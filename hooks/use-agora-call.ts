@@ -7,23 +7,23 @@ import { supabaseClient } from "@/lib/supabase/client";
 
 type CallKind = "audio" | "video";
 
-function uidFromUserId(userId: string) {
-  let hash = 0;
-  for (let i = 0; i < userId.length; i += 1) {
-    hash = (hash * 31 + userId.charCodeAt(i)) >>> 0;
-  }
-  return (hash % 2147483646) + 1;
-}
-
 export function useAgoraCall() {
   const clientRef = useRef<IAgoraRTCClient | null>(null);
   const audioTrackRef = useRef<ILocalAudioTrack | null>(null);
   const videoTrackRef = useRef<ILocalVideoTrack | null>(null);
+  const videoContainerRef = useRef<HTMLDivElement | null>(null);
   const [connected, setConnected] = useState(false);
   const [muted, setMuted] = useState(false);
   const [cameraOff, setCameraOff] = useState(false);
 
   const canUseAgora = useMemo(() => agoraConfig.appId.length > 0, []);
+
+  const setVideoContainer = useCallback((element: HTMLDivElement | null) => {
+    videoContainerRef.current = element;
+    if (element && videoTrackRef.current) {
+      videoTrackRef.current.play(element);
+    }
+  }, []);
 
   const startCall = useCallback(
     async ({ channel, uid, kind }: { channel: string; uid: string; kind: CallKind }) => {
@@ -36,7 +36,9 @@ export function useAgoraCall() {
           throw new Error("Supabase client is not initialized");
         }
 
-        const { data: { session } } = await supabaseClient.auth.getSession();
+        const {
+          data: { session }
+        } = await supabaseClient.auth.getSession();
         if (!session) {
           throw new Error("User is not authenticated");
         }
@@ -63,29 +65,25 @@ export function useAgoraCall() {
       }
 
       const AgoraRTC = await getAgoraRtc();
-      // Отключаем сбор аналитики и логов, чтобы избежать сетевых ошибок в консоли
       AgoraRTC.disableLogUpload();
       const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
       clientRef.current = client;
 
-      // Используем 0 как UID для автоматической генерации числового UID в Agora
       const token = await fetchToken(0);
 
-      try {
-        await client.join(agoraConfig.appId, channel, token, 0);
-      } catch (err) {
-        console.error("Failed to join Agora channel:", err);
-        throw err;
-      }
-
-      const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
-      audioTrackRef.current = audioTrack;
+      await client.join(agoraConfig.appId, channel, token, 0);
 
       if (kind === "video") {
-        const videoTrack = await AgoraRTC.createCameraVideoTrack();
+        const [audioTrack, videoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks();
+        audioTrackRef.current = audioTrack;
         videoTrackRef.current = videoTrack;
+        if (videoContainerRef.current) {
+          videoTrack.play(videoContainerRef.current);
+        }
         await client.publish([audioTrack, videoTrack]);
       } else {
+        const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+        audioTrackRef.current = audioTrack;
         await client.publish([audioTrack]);
       }
 
@@ -107,16 +105,21 @@ export function useAgoraCall() {
     setCameraOff(next);
     if (videoTrackRef.current) {
       await videoTrackRef.current.setEnabled(!next);
+      if (!next && videoContainerRef.current) {
+        videoTrackRef.current.play(videoContainerRef.current);
+      }
     }
   }, [cameraOff]);
 
   const endCall = useCallback(async () => {
     if (audioTrackRef.current) {
+      audioTrackRef.current.stop();
       audioTrackRef.current.close();
       audioTrackRef.current = null;
     }
 
     if (videoTrackRef.current) {
+      videoTrackRef.current.stop();
       videoTrackRef.current.close();
       videoTrackRef.current = null;
     }
@@ -139,6 +142,7 @@ export function useAgoraCall() {
     startCall,
     toggleMute,
     toggleCamera,
-    endCall
+    endCall,
+    setVideoContainer
   };
 }

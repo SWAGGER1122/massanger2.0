@@ -65,6 +65,7 @@ export function MessengerShell() {
         muted={agora.muted}
         cameraOff={agora.cameraOff}
         canUseAgora={agora.canUseAgora}
+        onVideoContainerChange={agora.setVideoContainer}
         onToggleMute={() => {
           void agora.toggleMute();
         }}

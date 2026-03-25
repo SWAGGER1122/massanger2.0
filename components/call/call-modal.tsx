@@ -11,6 +11,7 @@ interface CallModalProps {
   cameraOff: boolean;
   connected: boolean;
   canUseAgora: boolean;
+  onVideoContainerChange: (element: HTMLDivElement | null) => void;
   onToggleMute: () => void;
   onToggleCamera: () => void;
   onClose: () => void;
@@ -24,6 +25,7 @@ export function CallModal({
   cameraOff,
   connected,
   canUseAgora,
+  onVideoContainerChange,
   onToggleMute,
   onToggleCamera,
   onClose
@@ -49,7 +51,10 @@ export function CallModal({
               {canUseAgora ? (connected ? "Подключено к Agora" : "Подключение...") : "Добавьте NEXT_PUBLIC_AGORA_APP_ID"}
             </p>
 
-            <div className="my-6 h-48 rounded-2xl border border-white/10 bg-gradient-to-br from-slate-700/30 to-violet-900/30" />
+            <div
+              ref={kind === "video" ? onVideoContainerChange : undefined}
+              className="my-6 h-48 overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-slate-700/30 to-violet-900/30"
+            />
 
             <div className="flex items-center justify-center gap-4">
               <button

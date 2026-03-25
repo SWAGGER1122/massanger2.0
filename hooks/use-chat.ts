@@ -130,8 +130,8 @@ export function useChat() {
       });
 
       setChats(mappedChats);
-      if (mappedChats.length > 0 && !activeChatId) {
-        setActiveChatId(mappedChats[0].id);
+      if (mappedChats.length > 0) {
+        setActiveChatId((prev) => prev || mappedChats[0].id);
       }
     }
 
@@ -335,15 +335,24 @@ export function useChat() {
     if (message.kind === "voice") {
       insertPayload.voice_url = message.voiceUrl;
       insertPayload.duration_sec = message.durationSec;
+      console.log("Saving voice message metadata", {
+        chatId: message.chatId,
+        senderId: message.senderId,
+        voiceUrl: message.voiceUrl,
+        durationSec: message.durationSec
+      });
     }
 
     const firstAttempt = await supabaseClient.from("messages").insert(insertPayload);
 
     if (!firstAttempt.error) {
+      if (message.kind === "voice") {
+        console.log("Voice message metadata saved in messages table", { voiceUrl: message.voiceUrl });
+      }
       return;
     }
 
-    console.error(firstAttempt.error);
+    console.error("Failed to save message", firstAttempt.error);
 
     await ensureProfileExists(message.senderId);
     await ensureChatExists(message.chatId, message.senderId);
@@ -351,7 +360,9 @@ export function useChat() {
 
     const secondAttempt = await supabaseClient.from("messages").insert(insertPayload);
     if (secondAttempt.error) {
-      console.error(secondAttempt.error);
+      console.error("Failed to save message after retries", secondAttempt.error);
+    } else if (message.kind === "voice") {
+      console.log("Voice message metadata saved in messages table after retries", { voiceUrl: message.voiceUrl });
     }
   }
 
@@ -394,21 +405,37 @@ export function useChat() {
     const extension = blob.type.includes("ogg") ? "ogg" : "webm";
     let voiceUrl = URL.createObjectURL(blob);
     const filePath = `${activeChatId}/${currentUserIdState}/${crypto.randomUUID()}.${extension}`;
+    const bucketName = "media";
+    console.log("Preparing voice upload", {
+      bucket: bucketName,
+      filePath,
+      blobType: blob.type,
+      blobSize: blob.size,
+      durationSec
+    });
 
     if (supabaseClient && hasSupabaseEnv) {
       const { data: sessionData } = await supabaseClient.auth.getSession();
       if (!sessionData.session) {
+        console.error("Voice upload blocked: no authenticated session");
         return;
       }
+      try {
+        console.log("Uploading voice file to storage", { bucket: bucketName, filePath });
+        const uploadResult = await supabaseClient.storage.from(bucketName).upload(filePath, blob, {
+          contentType: blob.type || `audio/${extension}`,
+          upsert: false
+        });
 
-      const uploadResult = await supabaseClient.storage.from("media").upload(filePath, blob, {
-        contentType: blob.type || `audio/${extension}`,
-        upsert: false
-      });
-
-      if (!uploadResult.error) {
-        const { data } = supabaseClient.storage.from("media").getPublicUrl(filePath);
-        voiceUrl = data.publicUrl;
+        if (uploadResult.error) {
+          console.error("Voice upload failed", uploadResult.error);
+        } else {
+          const { data } = supabaseClient.storage.from(bucketName).getPublicUrl(filePath);
+          voiceUrl = data.publicUrl;
+          console.log("Voice upload completed", { voiceUrl });
+        }
+      } catch (error) {
+        console.error("Voice upload exception", error);
       }
     }
 
@@ -425,6 +452,7 @@ export function useChat() {
       status: "sent"
     };
 
+    console.log("Persisting voice message", { chatId: message.chatId, voiceUrl: message.voiceUrl });
     await persistMessage(message);
   }
 
